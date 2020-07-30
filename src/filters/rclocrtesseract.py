@@ -37,7 +37,7 @@ else:
 _okexts = ('.tif', '.tiff', '.jpg', '.png', '.jpeg')
 
 tesseractcmd = None
-pdftoppmcmd = None
+pdftocairocmd = None
 
 
 def _deb(s):
@@ -61,7 +61,7 @@ def _maybemaketmpdir():
             _deb("openfile: vacuumdir %s failed" % tmpdir)
             return False
     else:
-        tmpdir = tempfile.mkdtemp(prefix='rclmpdf')
+        tmpdir = tempfile.mkdtemp(prefix='rclmpdf', dir=os.environ.get("RECOLL_TMPDIR", None))
 
 
 def finalcleanup():
@@ -93,7 +93,7 @@ def ocrpossible(config, path):
     if not os.path.isfile(tesseractcmd):
         _deb("tesseractcmd parameter [%s] is not a file" % tesseractcmd)
         return False
-    
+
     # Check input format
     base,ext = os.path.splitext(path)
     ext = ext.lower()
@@ -101,17 +101,12 @@ def ocrpossible(config, path):
         return True
 
     if ext == '.pdf':
-        # Check for pdftoppm. We could use pdftocairo, which can
-        # produce a multi-page pdf and make the rest simpler, but the
-        # legacy code used pdftoppm for some reason, and it appears
-        # that the newest builds from conda-forge do not include
-        # pdftocairo. So stay with pdftoppm.
-        global pdftoppmcmd
-        if not pdftoppmcmd:
-            pdftoppmcmd = rclexecm.which("pdftoppm")
-            if not pdftoppmcmd:
-                pdftoppmcmd = rclexecm.which("poppler/pdftoppm")
-        if pdftoppmcmd:
+        global pdftocairocmd
+        if not pdftocairocmd:
+            pdftocairocmd = rclexecm.which("pdftocairo")
+            if not pdftocairocmd:
+                pdftocairocmd = rclexecm.which("poppler/pdftocairo")
+        if pdftocairocmd:
             return True
 
     return False
@@ -157,11 +152,8 @@ def _guesstesseractlang(config, path):
     _deb("Tesseract lang (guessed): %s" % tesseractlang)
     return tesseractlang
 
-
-# Process pdf file: use pdftoppm to split it into ppm pages, then run
-# tesseract on each and concatenate the result. It would probably be
-# possible instead to use pdftocairo to produce a tiff, buf pdftocairo
-# is sometimes not available (windows).
+# Process pdf file: use pdftocairo to split it into tiff pages, then run
+# tesseract on each and concatenate the result.
 def _pdftesseract(config, path):
     if not tmpdir:
         return b""
@@ -174,22 +166,22 @@ def _pdftesseract(config, path):
     # Split pdf pages
     try:
         vacuumdir(tmpdir)
-        cmd = [pdftoppmcmd, "-r", "300", path, tmpfile]
+        cmd = [pdftocairocmd, "-tiff", "-tiffcompression", "deflate", path, tmpfile]
         #_deb("Executing %s" % cmd)
         subprocess.check_call(cmd)
     except Exception as e:
-        _deb("%s failed: %s" % (pdftoppmcmd,e))
+        _deb("%s failed: %s" % (pdftocairocmd,e))
         return b""
 
-    # Note: unfortunately, pdftoppm silently fails if the temp file
+    # Note: unfortunately, pdftocairo silently fails if the temp file
     # system is full. There is no really good way to check for
     # this. We consider any empty file to signal an error
-    
-    ppmfiles = glob.glob(tmpfile + "*")
-    for f in ppmfiles:
+
+    tiffiles = glob.glob(tmpfile + "*")
+    for f in tiffiles:
         size = os.path.getsize(f)
         if os.path.getsize(f) == 0:
-            _deb("pdftoppm created empty files. "
+            _deb("pdftocairo created empty files. "
                  "Suspecting full file system, failing")
             return False, ""
 
@@ -202,7 +194,7 @@ def _pdftesseract(config, path):
         except:
             pass
 
-    for f in sorted(ppmfiles):
+    for f in sorted(tiffiles):
         out = b''
         try:
             out = subprocess.check_output(
@@ -247,7 +239,7 @@ def runocr(config, path):
     else:
         return _pdftesseract(config, path)
 
-   
+
 
 
 if __name__ == '__main__':
