@@ -1,0 +1,7 @@
+#!/usr/bin/sh
+tmptxt=$(mktemp -u).txt
+
+if /usr/bin/ebook-convert "$1" "$tmptxt" > /dev/null; then
+  cat "$tmptxt"
+  rm "$tmptxt"
+fi

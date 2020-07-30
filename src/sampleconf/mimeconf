@@ -147,7 +147,7 @@ application/vnd.sun.xml.writer.template = \
  internal xsltproc meta meta.xml opendoc-meta.xsl \
  body content.xml opendoc-body.xsl
 
-#application/x-mobipocket-ebook = execm rclmobi
+application/x-mobipocket-ebook = exec rclmobi;mimetype=text/plain
 #application/x-tar = execm rcltar
 
 application/epub+zip = execm rclepub
